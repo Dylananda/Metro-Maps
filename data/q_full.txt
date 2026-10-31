@@ -1,0 +1,16 @@
+[out:json][timeout:300];
+(
+ relation["type"="route"]["route"~"^(subway|funicular)$"]["network"="Metro de Barcelona"];
+ relation["type"="route"]["network"~"^(Metro del Vallès|Metro del Baix Llobregat|Rodalies de Catalunya)$"];
+)->.routes;
+.routes out body;
+node(r.routes)->.stops;
+.stops out body;
+way(r.routes:"platform")->.pw;
+.pw out tags center;
+rel(bn.stops)["public_transport"="stop_area"]->.areas;
+.areas out body;
+node(r.areas)->.an; .an out body;
+way(r.areas)->.aw; .aw out tags center;
+node["railway"~"^(subway_entrance|train_station_entrance)$"](41.25,1.85,41.65,2.35);
+out body;

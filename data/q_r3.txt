@@ -1,0 +1,1 @@
+[out:json];relation["type"="route"]["ref"~"^R3$|^R1$"]["network"~"Rodalies"];out tags;

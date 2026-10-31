@@ -1,0 +1,8 @@
+# Descargas en bruto de OpenStreetMap (grandes; se regeneran con las consultas de data/q_*.txt)
+data/osm_*.json
+data/routes_tags.json
+data/r3.json
+data/preview.html
+data/leaflet.js
+__pycache__/
+.claude/

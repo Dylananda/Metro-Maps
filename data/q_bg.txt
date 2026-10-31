@@ -1,0 +1,7 @@
+[out:json][timeout:250];
+(
+ way["highway"~"^(motorway|trunk|primary|secondary)$"](41.30,2.03,41.50,2.27);
+ way["natural"="coastline"](41.25,1.95,41.55,2.35);
+ way["leisure"="park"]["wikidata"](41.30,2.03,41.50,2.27);
+);
+out tags geom;

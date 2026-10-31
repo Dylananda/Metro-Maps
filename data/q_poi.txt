@@ -1,0 +1,11 @@
+[out:json][timeout:200];
+(
+ nwr["tourism"~"^(attraction|museum|zoo|aquarium|theme_park)$"]["name"]["wikidata"](41.31,2.04,41.48,2.25);
+ nwr["amenity"~"^(hospital|university|theatre|concert_hall|marketplace)$"]["name"](41.31,2.04,41.48,2.25);
+ nwr["leisure"~"^(stadium|park|beach_resort)$"]["name"]["wikidata"](41.31,2.04,41.48,2.25);
+ nwr["natural"="beach"]["name"](41.31,2.04,41.48,2.25);
+ nwr["shop"="mall"]["name"](41.31,2.04,41.48,2.25);
+ nwr["aeroway"="terminal"]["name"](41.25,2.0,41.33,2.12);
+ nwr["historic"]["name"]["wikidata"]["tourism"](41.31,2.04,41.48,2.25);
+);
+out tags center;
