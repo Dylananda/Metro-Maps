@@ -85,6 +85,7 @@ form { display: grid; gap: 8px; position: relative; }
 .sugg { position: absolute; left: 0; right: 0; z-index: 30; background: var(--surface); border: 1px solid var(--rule); border-radius: var(--r); box-shadow: 0 10px 30px rgba(0,0,0,.18); margin: 0; padding: 4px; list-style: none; max-height: 320px; overflow-y: auto; }
 .sugg li { padding: 8px 10px; border-radius: 8px; cursor: pointer; display: grid; grid-template-columns: 1fr auto; gap: 2px 8px; }
 .sugg li[aria-selected="true"], .sugg li:hover { background: var(--accent-soft); }
+.sugg li.busy { display: block; color: var(--muted); font-size: 13px; cursor: default; background: none; }
 .sugg .k { grid-column: 1 / -1; font-size: 12px; color: var(--muted); }
 .sugg .n { font-weight: 600; min-width: 0; }
 
@@ -355,15 +356,54 @@ function setPoint(which, pt) {
 }
 function openSugg(input) {
   activeInput = input;
-  suggItems = search(input.value);
-  suggSel = suggItems.length ? 0 : -1;
+  const q = input.value, local = search(q);
+  const pending = onlineLookup(input, q, local);
+  renderSugg(input, local, pending, q);
+}
+function renderSugg(input, items, pending, q) {
+  suggItems = items;
+  suggSel = items.length ? 0 : -1;
   const ul = $("sugg");
-  if (!suggItems.length) { ul.hidden = true; input.setAttribute("aria-expanded", "false"); return; }
-  ul.innerHTML = suggItems.map((it, i) =>
-    `<li role="option" id="sg${i}" aria-selected="${i === suggSel}" data-i="${i}"><span class="k">${esc(it.kind)}</span><span class="n">${esc(it.label)}</span>${it.lines ? badges(it.lines.slice(0, 6)) : ""}</li>`).join("");
+  const none = !items.length && !pending && norm(q || "").length >= 3;
+  if (!items.length && !pending && !none) { ul.hidden = true; input.setAttribute("aria-expanded", "false"); return; }
+  ul.innerHTML = items.map((it, i) =>
+    `<li role="option" id="sg${i}" aria-selected="${i === suggSel}" data-i="${i}"><span class="k">${esc(it.kind)}</span><span class="n">${esc(it.label)}</span>${it.lines ? badges(it.lines.slice(0, 6)) : ""}</li>`).join("")
+    + (pending ? '<li class="busy" aria-disabled="true">Buscando direcciones…</li>' : "")
+    + (none ? `<li class="busy" aria-disabled="true">No encuentro «${esc(q)}». Prueba con el nombre de la calle y el número.</li>` : "");
   const field = input.closest(".field");
   ul.style.top = field.offsetTop + field.offsetHeight + 4 + "px";
   ul.hidden = false; input.setAttribute("aria-expanded", "true");
+}
+
+/* Direcciones y edificios que no están en los datos guardados: se buscan en Photon
+   (buscador de OpenStreetMap) solo en la app instalable y con conexión. */
+let geoTimer = null, geoCtl = null;
+function onlineLookup(input, q, local) {
+  clearTimeout(geoTimer);
+  if (geoCtl) { geoCtl.abort(); geoCtl = null; }
+  if (!PWA || !navigator.onLine || norm(q).length < 3) return false;
+  geoTimer = setTimeout(async () => {
+    const ctl = geoCtl = new AbortController();
+    let extra = [];
+    try {
+      const url = "https://photon.komoot.io/api/?" + new URLSearchParams({ q, limit: "7", bbox: "1.85,41.25,2.35,41.65", lat: "41.39", lon: "2.17" });
+      const d = await fetch(url, { signal: ctl.signal }).then((r) => r.json());
+      extra = d.features.map(fromPhoton).filter((it) => it && !local.some((l) => norm(l.label) === norm(it.label) && E.dist(l, it) < 200));
+    } catch (e) {
+      if (e.name === "AbortError") return;
+    }
+    if (input.value !== q || activeInput !== input || $("sugg").hidden && document.activeElement !== input) return;
+    renderSugg(input, local.concat(extra).slice(0, 10), false, q);
+  }, 350);
+  return true;
+}
+function fromPhoton(f) {
+  const p = f.properties || {}, [lon, lat] = f.geometry.coordinates;
+  const addr = [p.street, p.housenumber].filter(Boolean).join(" ");
+  const label = p.name || addr;
+  if (!label) return null;
+  const where = [p.name ? addr : "", p.district || p.locality, p.city].filter(Boolean).join(", ");
+  return { kind: (p.name ? "Lugar" : "Dirección") + (where ? " · " + where : ""), label, lat, lon };
 }
 function closeSugg() { $("sugg").hidden = true; document.querySelectorAll("[role=combobox]").forEach((i) => i.setAttribute("aria-expanded", "false")); }
 function choose(i) {
@@ -706,6 +746,7 @@ function useMyLocation() {
 }
 if (PWA) {
   $("useGps").hidden = false; $("locate").hidden = false;
+  $("from").placeholder = $("to").placeholder = "Estación, dirección o lugar";
   $("useGps").addEventListener("click", useMyLocation);
   $("locate").addEventListener("click", () => {
     gps.follow = !gps.follow; $("locate").setAttribute("aria-pressed", gps.follow);

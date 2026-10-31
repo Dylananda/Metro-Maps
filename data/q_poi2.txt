@@ -1,0 +1,6 @@
+[out:json][timeout:200];
+(
+ nwr["amenity"~"^(school|college|library|community_centre|clinic|townhall|courthouse|police|post_office|arts_centre|cinema)$"]["name"](41.31,2.04,41.48,2.25);
+ nwr["leisure"="sports_centre"]["name"](41.31,2.04,41.48,2.25);
+);
+out tags center;

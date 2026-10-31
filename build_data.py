@@ -230,14 +230,22 @@ POI_KIND = [("aeroway", "terminal", "Aeropuerto"), ("amenity", "hospital", "Hosp
             ("tourism", "museum", "Museo"), ("tourism", "zoo", "Zoo"), ("tourism", "aquarium", "Acuario"),
             ("tourism", "theme_park", "Parque temático"), ("leisure", "stadium", "Estadio"),
             ("leisure", "park", "Parque"), ("natural", "beach", "Playa"), ("shop", "mall", "Centro comercial"),
-            ("tourism", "attraction", "Lugar de interés"), ("historic", None, "Monumento")]
+            ("tourism", "attraction", "Lugar de interés"), ("historic", None, "Monumento"),
+            ("amenity", "school", "Centro educativo"), ("amenity", "college", "Centro educativo"),
+            ("amenity", "library", "Biblioteca"), ("amenity", "community_centre", "Centro cívico"),
+            ("amenity", "clinic", "Centro de salud"), ("amenity", "townhall", "Ayuntamiento"),
+            ("amenity", "courthouse", "Juzgado"), ("amenity", "police", "Policía"),
+            ("amenity", "post_office", "Correos"), ("amenity", "arts_centre", "Centro cultural"),
+            ("amenity", "cinema", "Cine"), ("leisure", "sports_centre", "Polideportivo")]
 pois, seen = [], set()
-for e in load("data/osm_poi.json"):
+for e in load("data/osm_poi.json") + load("data/osm_poi2.json"):
     t = e.get("tags", {})
     p = ll(e)
     if not p or not t.get("name"):
         continue
-    kind = next((lab for k, v, lab in POI_KIND if (v is None and k in t) or t.get(k) == v), "Lugar")
+    kind = next((lab for k, v, lab in POI_KIND if ((k in t) if v is None else t.get(k) == v)), "Lugar")
+    if t.get("addr:street"):
+        kind += " · " + t["addr:street"] + (" " + t["addr:housenumber"] if t.get("addr:housenumber") else "")
     key = (t["name"].lower(), kind)
     if key in seen:
         continue
