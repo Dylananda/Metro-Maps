@@ -60,6 +60,8 @@ button, input { font: inherit; color: inherit; }
 .head { background: var(--ink); color: var(--bg); padding-block: 14px 12px; padding-left: max(16px, env(safe-area-inset-left, 0px)); padding-right: 16px; display: flex; align-items: center; gap: 10px; }
 .mark { width: 30px; height: 30px; flex: none; }
 .head h1 { margin: 0; font-family: var(--font-display); font-weight: 700; font-size: 26px; letter-spacing: .01em; line-height: 1; }
+.installbtn { margin-left: auto; flex: none; border: 0; border-radius: 999px; padding: 7px 14px; background: var(--accent); color: var(--accent-ink); font-weight: 700; font-size: 14px; cursor: pointer; }
+.howto { margin: 0; padding-left: 22px; display: grid; gap: 8px; font-size: 15px; }
 .head p { margin: 2px 0 0; font-size: 12px; letter-spacing: .08em; text-transform: uppercase; opacity: .75; }
 
 .inner { padding-block: 16px; padding-left: max(16px, env(safe-area-inset-left, 0px)); padding-right: 16px; display: flex; flex-direction: column; gap: 14px; }
@@ -171,6 +173,7 @@ details.stops ol { margin: 6px 0 0; padding-left: 18px; color: var(--muted); }
     <div class="head">
       <svg class="mark" viewBox="0 0 30 30" aria-hidden="true"><rect x="1" y="1" width="28" height="28" rx="7" fill="none" stroke="currentColor" stroke-width="2"/><path d="M8 21V9l7 7 7-7v12" fill="none" stroke="currentColor" stroke-width="2.6" stroke-linejoin="round"/></svg>
       <div><h1>Metro Maps BCN</h1><p>Metro · FGC · Rodalies — por dentro</p></div>
+      <button type="button" class="installbtn" id="install" hidden>Instalar</button>
     </div>
   <section class="panel" aria-label="Indicaciones">
     <div class="inner">
@@ -708,6 +711,73 @@ if (PWA) {
     gps.follow = !gps.follow; $("locate").setAttribute("aria-pressed", gps.follow);
     if (gps.follow) startGps((me) => map.setView([me.lat, me.lon], Math.max(map.getZoom(), 16)));
   });
+}
+
+/* ---------- instalar la app en el móvil ---------- */
+const SHARE_IC = '<svg width="16" height="16" viewBox="0 0 24 24" aria-hidden="true" style="vertical-align:-3px"><path d="M12 3v12M8 7l4-4 4 4M6 11H5v10h14V11h-1" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"/></svg>';
+function installHelp() {
+  const ua = navigator.userAgent;
+  const ios = /iPhone|iPad|iPod/.test(ua) || (navigator.platform === "MacIntel" && navigator.maxTouchPoints > 1);
+  const inApp = /FBAN|FBAV|Instagram|Line\/|WhatsApp|Telegram|wv\)/.test(ua);
+  if (inApp) return {
+    title: "Ábrela en el navegador",
+    steps: ["Ahora estás dentro de otra app (WhatsApp, Instagram…), y desde ahí no se puede instalar.",
+      "Busca el menú de esta pantalla (⋮ o ⋯) y elige <strong>Abrir en el navegador</strong>, <strong>Abrir en Chrome</strong> o <strong>Abrir en Safari</strong>.",
+      "Ya en el navegador, vuelve a pulsar <strong>Instalar</strong>."],
+  };
+  if (ios && /CriOS|FxiOS|EdgiOS/.test(ua)) return {
+    title: "Instalar en iPhone (Chrome)",
+    steps: [`Pulsa el botón Compartir ${SHARE_IC} que está arriba, a la derecha de la barra de direcciones.`,
+      "Baja por la lista y elige <strong>Añadir a pantalla de inicio</strong>. Si no aparece, pulsa <strong>Ver más</strong>.",
+      "Pulsa <strong>Añadir</strong>. El icono de Metro Maps aparecerá en tu pantalla de inicio."],
+  };
+  if (ios) return {
+    title: "Instalar en iPhone (Safari)",
+    steps: [`Pulsa el botón Compartir ${SHARE_IC}: el cuadrado con una flecha hacia arriba, en la barra de abajo (o arriba, en iPad).`,
+      "Baja por la lista y elige <strong>Añadir a pantalla de inicio</strong>.",
+      "Pulsa <strong>Añadir</strong>, arriba a la derecha. El icono de Metro Maps aparecerá en tu pantalla de inicio."],
+  };
+  if (/SamsungBrowser/.test(ua)) return {
+    title: "Instalar en Samsung Internet",
+    steps: ["Pulsa el menú <strong>☰</strong>, abajo a la derecha.",
+      "Elige <strong>Añadir página a</strong> → <strong>Pantalla de inicio</strong>.",
+      "Confirma con <strong>Añadir</strong>."],
+  };
+  if (/Firefox/.test(ua)) return {
+    title: "Instalar en Firefox",
+    steps: ["Pulsa el menú <strong>⋮</strong>.", "Elige <strong>Instalar</strong> o <strong>Añadir a pantalla de inicio</strong>.", "Confirma con <strong>Añadir</strong>."],
+  };
+  return {
+    title: "Instalar en Android (Chrome)",
+    steps: ["Pulsa el menú <strong>⋮</strong>, arriba a la derecha.",
+      "Elige <strong>Instalar aplicación</strong> o <strong>Añadir a pantalla de inicio</strong>.",
+      "Confirma con <strong>Instalar</strong>. El icono de Metro Maps aparecerá con tus apps."],
+  };
+}
+function showInstallHelp() {
+  const h = installHelp();
+  const sh = $("sheet");
+  sh.innerHTML = `<div class="sheet"><header><h2>${h.title}</h2><button type="button" class="iconbtn" id="closeSheet" title="Cerrar"><svg width="18" height="18" viewBox="0 0 24 24" aria-hidden="true"><path d="M6 6l12 12M18 6 6 18" stroke="currentColor" stroke-width="2" stroke-linecap="round"/></svg></button></header><ol class="howto">${h.steps.map((s) => `<li>${s}</li>`).join("")}</ol><p class="empty">Una vez instalada, se abre como una app normal y funciona también sin cobertura.</p></div>`;
+  sh.hidden = false;
+  sh.scrollIntoView({ block: "start", behavior: "smooth" });
+  $("closeSheet").onclick = () => { sh.hidden = true; };
+}
+if (PWA) {
+  const standalone = matchMedia("(display-mode: standalone)").matches || navigator.standalone === true;
+  let deferred = null;
+  addEventListener("beforeinstallprompt", (e) => { e.preventDefault(); deferred = e; });
+  addEventListener("appinstalled", () => { $("install").hidden = true; toast("Instalada: ya la tienes con tus apps."); });
+  if (!standalone) {
+    $("install").hidden = false;
+    $("install").addEventListener("click", async () => {
+      if (deferred) {
+        deferred.prompt();
+        const choice = await deferred.userChoice.catch(() => null);
+        deferred = null;
+        if (choice && choice.outcome === "accepted") $("install").hidden = true;
+      } else showInstallHelp();
+    });
+  }
 }
 
 /* ---------- arranque con una ruta de ejemplo ---------- */
