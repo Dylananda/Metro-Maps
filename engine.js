@@ -116,8 +116,14 @@
       return [];
     }
 
+    // Opciones internas para buscar alternativas:
+    //   ban          líneas que no se pueden usar
+    //   boardPenalty minutos extra por cada subida (más alto = menos transbordos)
+    //   walkFactor   cuánto pesa caminar (más alto = menos a pie)
+    //   noWalk       no proponer ir andando todo el camino
     function route(from, to, opt = {}) {
-      opt = { accessible: false, modes: null, ...opt };
+      opt = { accessible: false, modes: null, ban: null, boardPenalty: BOARD_PENALTY, walkFactor: 1, noWalk: false, ...opt };
+      const wf = opt.walkFactor;
       const dist0 = new Float64Array(N + 2).fill(Infinity);
       const prev = new Int32Array(N + 2).fill(-1);
       const how = new Array(N + 2);
@@ -137,19 +143,20 @@
         if (d > dist0[u]) continue;
         if (u === T) break;
         if (u === O) {
-          relax(O, T, walkMin(direct), { t: "walk", m: direct });
-          for (const [s, a] of accessEdges(from, opt)) relax(O, s.idx, a.min, { t: "in", s, a });
+          if (!opt.noWalk) relax(O, T, walkMin(direct) * wf, { t: "walk", m: direct });
+          for (const [s, a] of accessEdges(from, opt)) relax(O, s.idx, a.min * wf, { t: "in", s, a });
           continue;
         }
         if (u < nS) {
           const s = D.stations[u];
           for (const [p, i] of s.pats) {
             if (!modeAllowed(p, opt) || i === p.stops.length - 1 || p.stops[i].role === 2) continue;
-            relax(u, pOffset[p.k] + i, p.hw / 2 + BOARD_PENALTY, { t: "board", p, i });
+            if (opt.ban && opt.ban.has(p.line)) continue;
+            relax(u, pOffset[p.k] + i, p.hw / 2 + opt.boardPenalty, { t: "board", p, i });
           }
-          for (const x of s.xfers) relax(u, stations[x.to].idx, x.min + 0.5, { t: "xfer", x, s });
+          for (const x of s.xfers) relax(u, stations[x.to].idx, (x.min + 0.5) * wf, { t: "xfer", x, s });
           const a = outEdges.get(u);
-          if (a) relax(u, T, a.min, { t: "out", s, a });
+          if (a) relax(u, T, a.min * wf, { t: "out", s, a });
           continue;
         }
         // nodo de tren: (patrón, parada)
@@ -205,7 +212,53 @@
         }
       });
       const rides = legs.filter((l) => l.type === "ride");
-      return { legs, total, rides: rides.length, notes: notesFor(legs, rides) };
+      // Tiempo real (sin las penalizaciones que solo sirven para elegir) y metros a pie.
+      const realTotal = legs.reduce((a, l) => a + l.min + (l.type === "ride" ? l.wait : 0), 0);
+      const walkM = legs.reduce((a, l) => a + (l.type === "ride" ? 0 : l.m), 0);
+      return { legs, total: realTotal, score: total, walkM, rides: rides.length, notes: notesFor(legs, rides) };
+    }
+
+    // Varias opciones, como en los navegadores: la más rápida y alternativas que cambian de línea,
+    // hacen menos transbordos o caminan menos. Descarta las que son casi iguales o mucho más lentas.
+    function routes(from, to, opt = {}) {
+      const best = route(from, to, opt);
+      if (!best) return [];
+      const ridesOf = (r) => r.legs.filter((l) => l.type === "ride");
+      const used = ridesOf(best).map((l) => l.line.id);
+      const tries = [
+        { boardPenalty: 12 },
+        { walkFactor: 2.2 },
+        ...used.map((id) => ({ ban: new Set([id]) })),
+      ];
+      if (used.length > 1) tries.push({ ban: new Set(used) });
+      if (!used.length) tries.push({ noWalk: true });
+      const cands = [best];
+      tries.forEach((t) => { const r = route(from, to, { ...opt, ...t }); if (r) cands.push(r); });
+      // Segunda vuelta: alternativas a la primera alternativa (p. ej. otra línea distinta de las dos anteriores).
+      const second = cands.find((r) => r !== best && ridesOf(r).length);
+      if (second) {
+        const ban = new Set([...used, ...ridesOf(second).map((l) => l.line.id)]);
+        const r = route(from, to, { ...opt, ban });
+        if (r) cands.push(r);
+      }
+      const sig = (r) => ridesOf(r).map((l) => l.line.id).join(">") || "walk";
+      const bySig = new Map();
+      cands.forEach((r) => { const k = sig(r); if (!bySig.has(k) || r.total < bySig.get(k).total) bySig.set(k, r); });
+      const fastest = Math.min(...[...bySig.values()].map((r) => r.total));
+      let list = [...bySig.values()].filter((r) => r.total <= Math.min(fastest * 1.6 + 8, fastest + 30));
+      list.sort((a, b) => a.total - b.total);
+      list = list.slice(0, 4);
+      const transit = list.filter((r) => r.rides);
+      const minRides = Math.min(...transit.map((r) => r.rides));
+      const minWalk = Math.min(...list.map((r) => r.walkM));
+      list.forEach((r, i) => {
+        r.tags = [];
+        if (i === 0) r.tags.push("Más rápida");
+        if (!r.rides) { if (i > 0) r.tags.push("A pie"); return; }
+        if (r.rides === minRides && i > 0 && list[0].rides > minRides) r.tags.push("Menos transbordos");
+        if (r.walkM === minWalk && i > 0 && list[0].walkM - minWalk > 150) r.tags.push("Menos a pie");
+      });
+      return list;
     }
 
     function nearestEnt(s, pt, opt) {
@@ -264,7 +317,7 @@
       return notes;
     }
 
-    return { route, stations, lines, dist, walkMin };
+    return { route, routes, stations, lines, dist, walkMin };
   }
 
   const api = { createEngine };

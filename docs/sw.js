@@ -1,5 +1,5 @@
 // Service worker de Metro Maps BCN: guarda la app para que funcione sin cobertura (en el metro, por ejemplo).
-const VERSION = "eba988abb6";
+const VERSION = "01229c5c7d";
 const CACHE = "metro-maps-" + VERSION;
 const CORE = ["./", "index.html", "leaflet.js", "manifest.webmanifest", "icons/icon-192.png", "icons/icon-512.png", "icons/apple-180.png"];
 

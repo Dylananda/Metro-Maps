@@ -110,10 +110,17 @@ form { display: grid; gap: 8px; position: relative; }
 .badge.rodalies, .badge.fgc { border-radius: 11px; }
 .badges { display: inline-flex; flex-wrap: wrap; gap: 3px; vertical-align: middle; }
 
-.summary { display: grid; grid-template-columns: auto 1fr; gap: 4px 14px; align-items: center; background: var(--surface); border: 1px solid var(--rule); border-radius: var(--r); padding: 14px; }
-.summary .big { font-family: var(--font-display); font-weight: 700; font-size: 44px; line-height: .9; font-variant-numeric: tabular-nums; grid-row: span 2; }
-.summary .big small { font-size: 18px; margin-left: 2px; }
-.summary .meta { color: var(--muted); font-size: 13px; }
+.options { display: grid; gap: 8px; }
+.optshead { margin: 0; font-size: 12px; font-weight: 700; letter-spacing: .08em; text-transform: uppercase; color: var(--muted); }
+.optcard { display: grid; grid-template-columns: 74px 1fr; grid-auto-rows: auto; gap: 4px 12px; align-items: center; width: 100%; text-align: left; background: var(--surface); border: 1px solid var(--rule); border-radius: var(--r); padding: 12px 14px; cursor: pointer; }
+.optcard:hover { border-color: var(--muted); }
+.optcard[aria-checked="true"] { border-color: var(--accent); box-shadow: inset 0 0 0 1px var(--accent); }
+.optcard .big { font-family: var(--font-display); font-weight: 700; font-size: 38px; line-height: .9; font-variant-numeric: tabular-nums; grid-row: span 3; align-self: center; }
+.optcard[aria-checked="false"] .big { font-size: 30px; color: var(--muted); }
+.optcard .big small { font-size: 16px; margin-left: 2px; }
+.optcard .meta { color: var(--muted); font-size: 13px; }
+.otags { display: flex; flex-wrap: wrap; gap: 4px; align-items: center; }
+.otag { font-size: 11px; font-weight: 700; padding: 2px 8px; border-radius: 999px; background: var(--accent-soft); color: var(--ink); }
 .chain { display: flex; flex-wrap: wrap; align-items: center; gap: 4px; }
 .chain .sep { color: var(--muted); font-size: 12px; }
 .tag { font-size: 11px; font-weight: 700; letter-spacing: .08em; text-transform: uppercase; color: var(--warn); }
@@ -347,8 +354,14 @@ details.stops ol { margin: 6px 0 0; padding-left: 18px; color: var(--muted); }
       return [];
     }
 
+    // Opciones internas para buscar alternativas:
+    //   ban          líneas que no se pueden usar
+    //   boardPenalty minutos extra por cada subida (más alto = menos transbordos)
+    //   walkFactor   cuánto pesa caminar (más alto = menos a pie)
+    //   noWalk       no proponer ir andando todo el camino
     function route(from, to, opt = {}) {
-      opt = { accessible: false, modes: null, ...opt };
+      opt = { accessible: false, modes: null, ban: null, boardPenalty: BOARD_PENALTY, walkFactor: 1, noWalk: false, ...opt };
+      const wf = opt.walkFactor;
       const dist0 = new Float64Array(N + 2).fill(Infinity);
       const prev = new Int32Array(N + 2).fill(-1);
       const how = new Array(N + 2);
@@ -368,19 +381,20 @@ details.stops ol { margin: 6px 0 0; padding-left: 18px; color: var(--muted); }
         if (d > dist0[u]) continue;
         if (u === T) break;
         if (u === O) {
-          relax(O, T, walkMin(direct), { t: "walk", m: direct });
-          for (const [s, a] of accessEdges(from, opt)) relax(O, s.idx, a.min, { t: "in", s, a });
+          if (!opt.noWalk) relax(O, T, walkMin(direct) * wf, { t: "walk", m: direct });
+          for (const [s, a] of accessEdges(from, opt)) relax(O, s.idx, a.min * wf, { t: "in", s, a });
           continue;
         }
         if (u < nS) {
           const s = D.stations[u];
           for (const [p, i] of s.pats) {
             if (!modeAllowed(p, opt) || i === p.stops.length - 1 || p.stops[i].role === 2) continue;
-            relax(u, pOffset[p.k] + i, p.hw / 2 + BOARD_PENALTY, { t: "board", p, i });
+            if (opt.ban && opt.ban.has(p.line)) continue;
+            relax(u, pOffset[p.k] + i, p.hw / 2 + opt.boardPenalty, { t: "board", p, i });
           }
-          for (const x of s.xfers) relax(u, stations[x.to].idx, x.min + 0.5, { t: "xfer", x, s });
+          for (const x of s.xfers) relax(u, stations[x.to].idx, (x.min + 0.5) * wf, { t: "xfer", x, s });
           const a = outEdges.get(u);
-          if (a) relax(u, T, a.min, { t: "out", s, a });
+          if (a) relax(u, T, a.min * wf, { t: "out", s, a });
           continue;
         }
         // nodo de tren: (patrón, parada)
@@ -436,7 +450,53 @@ details.stops ol { margin: 6px 0 0; padding-left: 18px; color: var(--muted); }
         }
       });
       const rides = legs.filter((l) => l.type === "ride");
-      return { legs, total, rides: rides.length, notes: notesFor(legs, rides) };
+      // Tiempo real (sin las penalizaciones que solo sirven para elegir) y metros a pie.
+      const realTotal = legs.reduce((a, l) => a + l.min + (l.type === "ride" ? l.wait : 0), 0);
+      const walkM = legs.reduce((a, l) => a + (l.type === "ride" ? 0 : l.m), 0);
+      return { legs, total: realTotal, score: total, walkM, rides: rides.length, notes: notesFor(legs, rides) };
+    }
+
+    // Varias opciones, como en los navegadores: la más rápida y alternativas que cambian de línea,
+    // hacen menos transbordos o caminan menos. Descarta las que son casi iguales o mucho más lentas.
+    function routes(from, to, opt = {}) {
+      const best = route(from, to, opt);
+      if (!best) return [];
+      const ridesOf = (r) => r.legs.filter((l) => l.type === "ride");
+      const used = ridesOf(best).map((l) => l.line.id);
+      const tries = [
+        { boardPenalty: 12 },
+        { walkFactor: 2.2 },
+        ...used.map((id) => ({ ban: new Set([id]) })),
+      ];
+      if (used.length > 1) tries.push({ ban: new Set(used) });
+      if (!used.length) tries.push({ noWalk: true });
+      const cands = [best];
+      tries.forEach((t) => { const r = route(from, to, { ...opt, ...t }); if (r) cands.push(r); });
+      // Segunda vuelta: alternativas a la primera alternativa (p. ej. otra línea distinta de las dos anteriores).
+      const second = cands.find((r) => r !== best && ridesOf(r).length);
+      if (second) {
+        const ban = new Set([...used, ...ridesOf(second).map((l) => l.line.id)]);
+        const r = route(from, to, { ...opt, ban });
+        if (r) cands.push(r);
+      }
+      const sig = (r) => ridesOf(r).map((l) => l.line.id).join(">") || "walk";
+      const bySig = new Map();
+      cands.forEach((r) => { const k = sig(r); if (!bySig.has(k) || r.total < bySig.get(k).total) bySig.set(k, r); });
+      const fastest = Math.min(...[...bySig.values()].map((r) => r.total));
+      let list = [...bySig.values()].filter((r) => r.total <= Math.min(fastest * 1.6 + 8, fastest + 30));
+      list.sort((a, b) => a.total - b.total);
+      list = list.slice(0, 4);
+      const transit = list.filter((r) => r.rides);
+      const minRides = Math.min(...transit.map((r) => r.rides));
+      const minWalk = Math.min(...list.map((r) => r.walkM));
+      list.forEach((r, i) => {
+        r.tags = [];
+        if (i === 0) r.tags.push("Más rápida");
+        if (!r.rides) { if (i > 0) r.tags.push("A pie"); return; }
+        if (r.rides === minRides && i > 0 && list[0].rides > minRides) r.tags.push("Menos transbordos");
+        if (r.walkM === minWalk && i > 0 && list[0].walkM - minWalk > 150) r.tags.push("Menos a pie");
+      });
+      return list;
     }
 
     function nearestEnt(s, pt, opt) {
@@ -495,7 +555,7 @@ details.stops ol { margin: 6px 0 0; padding-left: 18px; color: var(--muted); }
       return notes;
     }
 
-    return { route, stations, lines, dist, walkMin };
+    return { route, routes, stations, lines, dist, walkMin };
   }
 
   const api = { createEngine };
@@ -788,10 +848,28 @@ function trainSvg(zone) {
 let lastResult = null;
 function plan() {
   if (!state.from || !state.to) { render(null); return; }
-  const r = E.route(state.from, state.to, { modes: state.modes, accessible: state.accessible });
-  lastResult = r ? { r, from: state.from, to: state.to, phase: 0 } : null;
+  const list = E.routes(state.from, state.to, { modes: state.modes, accessible: state.accessible });
+  lastResult = list.length ? { r: list[0], list, sel: 0, from: state.from, to: state.to, phase: 0 } : null;
   render(lastResult);
   if (lastResult) drawRoute(lastResult, true);
+}
+function selectOption(i) {
+  if (!lastResult || !lastResult.list[i]) return;
+  Object.assign(lastResult, { sel: i, r: lastResult.list[i], phase: 0 });
+  render(lastResult);
+  drawRoute(lastResult, true);
+}
+function optionCard(o, i, res) {
+  const rides = o.legs.filter((l) => l.type === "ride");
+  const arrive = new Date(Date.now() + o.total * 60000).toLocaleTimeString("es-ES", { hour: "2-digit", minute: "2-digit" });
+  const xf = rides.length > 1 ? rides.length - 1 + " transbordo" + (rides.length > 2 ? "s" : "") : rides.length ? "sin transbordos" : "sin tren";
+  const tags = o.tags.map((t) => `<span class="otag">${esc(t)}</span>`).join("") + (i === 0 && state.example ? '<span class="tag">Ruta de ejemplo</span>' : "");
+  return `<button type="button" class="optcard" role="radio" aria-checked="${i === res.sel}" data-opt="${i}">
+    <span class="big">${fmtMin(o.total)}<small>min</small></span>
+    <span class="chain">${rides.length ? rides.map((l) => badge(l.line)).join('<span class="sep">›</span>') : '<span class="mini">A pie</span>'}</span>
+    <span class="meta">Llegada ${arrive} · ${xf} · ${fmtM(o.walkM)} a pie</span>
+    ${tags ? `<span class="otags">${tags}</span>` : ""}
+  </button>`;
 }
 
 function render(res) {
@@ -803,13 +881,10 @@ function render(res) {
     return;
   }
   const { r, from, to } = res;
-  const arrive = new Date(Date.now() + r.total * 60000);
-  const rides = r.legs.filter((l) => l.type === "ride");
-  const walkM = r.legs.reduce((a, l) => a + (l.type === "enter" || l.type === "exit" || l.type === "walk" ? l.m : 0) + (l.type === "transfer" && l.street ? l.m : 0), 0);
-  let h = `<div class="summary">
-    <div class="big">${fmtMin(r.total)}<small>min</small></div>
-    <div class="chain">${rides.length ? rides.map((l) => badge(l.line)).join('<span class="sep">›</span>') : '<span class="mini">A pie</span>'}${state.example ? ' <span class="tag">Ruta de ejemplo</span>' : ""}</div>
-    <div class="meta">Llegada aprox. ${arrive.toLocaleTimeString("es-ES", { hour: "2-digit", minute: "2-digit" })} · ${rides.length > 1 ? rides.length - 1 + " transbordo" + (rides.length > 2 ? "s" : "") : rides.length ? "sin transbordos" : "sin tren"} · ${fmtM(walkM)} a pie</div>
+  const n = res.list.length;
+  let h = `<div class="options" role="radiogroup" aria-label="Opciones de trayecto">
+    ${n > 1 ? `<p class="optshead">${n} opciones · toca una para ver sus pasos</p>` : ""}
+    ${res.list.map((o, i) => optionCard(o, i, res)).join("")}
   </div><ol class="steps">`;
 
   r.legs.forEach((L, k) => {
@@ -867,6 +942,8 @@ function step(cls, icon, title, sub, chips, station, exit) {
   return `<li class="step ${cls}"><div class="ico ${exit ? "exit" : ""}">${icon}</div><div><h3>${title}</h3><div class="sub">${sub}</div>${chips || more ? `<div class="chips">${chips || ""}${more}</div>` : ""}<div class="live" hidden></div></div></li>`;
 }
 $("out").addEventListener("click", (e) => {
+  const o = e.target.closest("[data-opt]");
+  if (o) { selectOption(+o.dataset.opt); return; }
   const b = e.target.closest("[data-sheet]");
   if (b) { showSheet(complexOf(b.dataset.sheet)); }
 });
