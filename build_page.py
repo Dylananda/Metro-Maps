@@ -1,15 +1,18 @@
 """Genera, a partir de la misma plantilla, el motor y los datos:
   - metro-maps-bcn.html  la página que se publica como Artifact (sin GPS)
   - docs/                la app instalable con GPS y modo sin conexión
+Necesita data/network.json (build_data.py) y data/indoor.json (build_indoor.py).
 """
 import hashlib, json, os, shutil
 
 t = open("app_template.html", encoding="utf-8").read()
 css = open("data/leaflet.css", encoding="utf-8").read()
 eng = open("engine.js", encoding="utf-8").read()
+eng += "\n" + open("indoor.js", encoding="utf-8").read()
+indoor = open("data/indoor.json", encoding="utf-8").read().replace("</", r"<\/")
 data = open("data/network.json", encoding="utf-8").read().replace("</", r"<\/")
 json.loads(data.replace(r"<\/", "</"))
-body = t.replace("/*__LEAFLET_CSS__*/", css).replace("/*__ENGINE__*/", eng).replace("/*__DATA__*/", data)
+body = t.replace("/*__LEAFLET_CSS__*/", css).replace("/*__ENGINE__*/", eng).replace("/*__DATA__*/", data).replace("/*__INDOOR_DATA__*/", indoor).replace("/*__INDOOR__*/", "")
 
 # ---------------------------------------------------------------- Artifact
 page = body.replace("/*__LEAFLET_SRC__*/", "https://cdnjs.cloudflare.com/ajax/libs/leaflet/1.9.4/leaflet.min.js")

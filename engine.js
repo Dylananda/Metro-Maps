@@ -255,7 +255,7 @@
         r.tags = [];
         if (i === 0) r.tags.push("Más rápida");
         if (!r.rides) { if (i > 0) r.tags.push("A pie"); return; }
-        if (r.rides === minRides && i > 0 && list[0].rides > minRides) r.tags.push("Menos transbordos");
+        if (r.rides === minRides && i > 0 && list[0].rides > minRides && !list.slice(1, i).some((o) => o.rides === minRides)) r.tags.push("Menos transbordos");
         if (r.walkM === minWalk && i > 0 && list[0].walkM - minWalk > 150) r.tags.push("Menos a pie");
       });
       return list;

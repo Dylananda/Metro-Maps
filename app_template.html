@@ -62,6 +62,30 @@ button, input { font: inherit; color: inherit; }
 .head h1 { margin: 0; font-family: var(--font-display); font-weight: 700; font-size: 26px; letter-spacing: .01em; line-height: 1; }
 .installbtn { margin-left: auto; flex: none; border: 0; border-radius: 999px; padding: 7px 14px; background: var(--accent); color: var(--accent-ink); font-weight: 700; font-size: 14px; cursor: pointer; }
 .howto { margin: 0; padding-left: 22px; display: grid; gap: 8px; font-size: 15px; }
+.indoor { margin-top: 8px; display: flex; flex-wrap: wrap; gap: 6px 10px; align-items: center; }
+.planbtn { display: inline-flex; gap: 6px; align-items: center; border: 1.5px solid var(--accent); color: var(--accent); background: var(--surface); border-radius: 999px; padding: 5px 12px; font-weight: 700; font-size: 13px; cursor: pointer; }
+.planbtn:hover { background: var(--accent-soft); }
+.indoortxt { font-size: 12.5px; color: var(--muted); }
+.planmodal { position: fixed; inset: 0; z-index: 3000; background: rgba(10, 16, 20, .5); display: grid; place-items: center; padding: max(16px, env(safe-area-inset-top, 0px)) max(16px, env(safe-area-inset-right, 0px)) max(16px, env(safe-area-inset-bottom, 0px)) max(16px, env(safe-area-inset-left, 0px)); }
+.planbox { background: var(--bg); width: min(980px, 100%); height: min(780px, 100%); display: grid; grid-template-rows: auto 1fr auto; border-radius: var(--r); overflow: hidden; box-shadow: 0 20px 60px rgba(0,0,0,.35); }
+.planbox header { display: flex; justify-content: space-between; align-items: start; gap: 10px; padding: 12px 16px; border-bottom: 1px solid var(--rule); background: var(--surface); }
+.planbox h2 { margin: 0; font-family: var(--font-display); font-size: 24px; line-height: 1.05; text-wrap: balance; }
+.planbox header p { margin: 4px 0 0; font-size: 13.5px; color: var(--muted); }
+#planMap { min-height: 0; position: relative; }
+.planbox footer { padding: 8px 16px 10px; border-top: 1px solid var(--rule); background: var(--surface); font-size: 12px; color: var(--muted); display: grid; gap: 4px; }
+.planbox footer p { margin: 0; }
+.planlegend { display: flex; flex-wrap: wrap; gap: 4px 14px; }
+.planlegend i { display: inline-block; width: 18px; height: 0; margin-right: 5px; vertical-align: middle; border-top: 3px solid var(--muted); }
+.planlegend .lg-path { border-top: 5px solid var(--accent); }
+.planlegend .lg-steps { border-top: 3px dashed var(--warn); }
+.planlegend .lg-plat { height: 10px; border: 0; background: var(--me-soft); outline: 1px solid var(--me); }
+.planlegend .lg-ent { width: 10px; height: 10px; border: 0; border-radius: 50%; background: var(--accent); }
+.leaflet-tooltip.platlbl { font-size: 11px; padding: 2px 6px; }
+.leaflet-tooltip.platlbl.hot { background: var(--ink); color: var(--bg); border-color: var(--ink); }
+@media (max-width: 760px) {
+  .planmodal { padding: 0; }
+  .planbox { width: 100%; height: 100%; border-radius: 0; padding-top: env(safe-area-inset-top, 0px); padding-bottom: env(safe-area-inset-bottom, 0px); }
+}
 .head p { margin: 2px 0 0; font-size: 12px; letter-spacing: .08em; text-transform: uppercase; opacity: .75; }
 
 .inner { padding-block: 16px; padding-left: max(16px, env(safe-area-inset-left, 0px)); padding-right: 16px; display: flex; flex-direction: column; gap: 14px; }
@@ -216,16 +240,33 @@ details.stops ol { margin: 6px 0 0; padding-left: 18px; color: var(--muted); }
   </section>
 </div>
 
+<div class="planmodal" id="planModal" hidden role="dialog" aria-modal="true" aria-labelledby="planTitle">
+  <div class="planbox">
+    <header>
+      <div><h2 id="planTitle">Plano de la estación</h2><p id="planSub"></p></div>
+      <button type="button" class="iconbtn" id="planClose" title="Cerrar el plano"><svg width="20" height="20" viewBox="0 0 24 24" aria-hidden="true"><path d="M6 6l12 12M18 6 6 18" stroke="currentColor" stroke-width="2" stroke-linecap="round"/></svg></button>
+    </header>
+    <div id="planMap"></div>
+    <footer>
+      <div class="planlegend" aria-hidden="true"><span><i class="lg-path"></i>Tu camino</span><span><i class="lg-corr"></i>Pasillo</span><span><i class="lg-steps"></i>Escaleras</span><span><i class="lg-plat"></i>Andén</span><span><i class="lg-ent"></i>Boca</span></div>
+      <p>Plano dibujado con datos de OpenStreetMap: puede estar incompleto y no distingue bien las plantas. Úsalo para orientarte junto con los carteles.</p>
+    </footer>
+  </div>
+</div>
+
 <script type="application/json" id="net">/*__DATA__*/</script>
+<script type="application/json" id="indoor">/*__INDOOR_DATA__*/</script>
 <script src="/*__LEAFLET_SRC__*/"></script>
 <script>
 /*__ENGINE__*/
+/*__INDOOR__*/
 </script>
 <script>
 (function () {
 "use strict";
 const D = JSON.parse(document.getElementById("net").textContent);
 const E = MetroEngine.createEngine(D);
+const I = MetroIndoor.create(JSON.parse(document.getElementById("indoor").textContent));
 const $ = (id) => document.getElementById(id);
 const esc = (s) => String(s).replace(/[&<>"']/g, (c) => ({ "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;", "'": "&#39;" }[c]));
 const norm = (s) => s.normalize("NFD").replace(/\p{M}/gu, "").toLowerCase().replace(/[·'’.\-|/]/g, " ").replace(/\s+/g, " ").trim();
@@ -471,6 +512,7 @@ const IC = {
   xfer: '<svg width="18" height="18" viewBox="0 0 24 24" aria-hidden="true"><path d="M4 8h13l-3-3M20 16H7l3 3" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"/></svg>',
   exit: '<svg width="18" height="18" viewBox="0 0 24 24" aria-hidden="true"><path d="M4 18h5v-4h5v-4h6M8 7l3-3 3 3M11 4v6" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"/></svg>',
   flag: '<svg width="18" height="18" viewBox="0 0 24 24" aria-hidden="true"><path d="M6 21V4h11l-2 4 2 4H6" fill="none" stroke="currentColor" stroke-width="2" stroke-linejoin="round"/></svg>',
+  plan: '<svg width="16" height="16" viewBox="0 0 24 24" aria-hidden="true"><path d="M3 5h7v6H3zM14 5h7v14h-7zM3 15h7v4H3zM10 8h4M6.5 11v4" fill="none" stroke="currentColor" stroke-width="2" stroke-linejoin="round"/></svg>',
 };
 
 function entChips(e) {
@@ -539,6 +581,7 @@ function render(res) {
   }
   const { r, from, to } = res;
   const n = res.list.length;
+  res.indoor = indoorPaths(r);
   let h = `<div class="options" role="radiogroup" aria-label="Opciones de trayecto">
     ${n > 1 ? `<p class="optshead">${n} opciones · toca una para ver sus pasos</p>` : ""}
     ${res.list.map((o, i) => optionCard(o, i, res)).join("")}
@@ -573,7 +616,10 @@ function render(res) {
         const b = L.enterEnt ? `entra por <q>${esc(L.enterEnt.name)}</q>` : `entra en ${esc(L.to.name)}`;
         h += step("xfer", IC.xfer, `Transbordo por la calle: ${a}, camina ${fmtM(L.m)} y ${b}`, `${fmtMin(L.min)} min · ${esc(L.from.name)} → ${esc(L.to.name)}`, entChips(L.enterEnt), L.to);
       } else {
-        h += step("xfer", IC.xfer, `Correspondencia por pasillo${nextRide ? " hacia " + badge(nextRide.line) : ""}`, `Unos ${fmtMin(L.min)} min andando (${fmtM(L.m)}) dentro de ${esc(L.to.name)}`, "", L.to);
+        // Con plano interior, la distancia real del pasillo sustituye a la estimación.
+        const ip = res.indoor[k];
+        const m = ip && !ip.same ? ip.m : L.m, min = ip && !ip.same ? 1 + (ip.m * 1.1) / 70 : L.min;
+        h += step("xfer", IC.xfer, `Correspondencia por pasillo${nextRide ? " hacia " + badge(nextRide.line) : ""}`, `Unos ${fmtMin(min)} min andando (${fmtM(m)}) dentro de ${esc(L.to.name)}`, "", L.to);
       }
     } else if (L.type === "exit") {
       const st = L.station;
@@ -584,6 +630,12 @@ function render(res) {
       } else {
         h += step("exit", IC.exit, `Sal de la estación ${esc(st.name)}`, `Camina ${fmtM(L.m)} hasta ${esc(to.label)}`, entChips(null), st, true);
       }
+    }
+    // Camino por dentro de la estación, si hay plano: se añade al final del paso.
+    const ip = res.indoor[k];
+    if (ip) {
+      const block = `<div class="indoor"><button type="button" class="planbtn" data-indoor="${k}">${IC.plan}Ver el camino en el plano</button><span class="indoortxt">Por dentro: ${esc(I.describe(ip))} · ${fmtM(ip.m)}</span></div>`;
+      h = h.replace(/<div class="live" hidden><\/div><\/div><\/li>$/, block + '<div class="live" hidden></div></div></li>');
     }
   });
   h += "</ol>";
@@ -601,9 +653,93 @@ function step(cls, icon, title, sub, chips, station, exit) {
 $("out").addEventListener("click", (e) => {
   const o = e.target.closest("[data-opt]");
   if (o) { selectOption(+o.dataset.opt); return; }
+  const ib = e.target.closest("[data-indoor]");
+  if (ib && lastResult) { const ip = lastResult.indoor[+ib.dataset.indoor]; openPlan(ip.plan, ip, ip.title); return; }
   const b = e.target.closest("[data-sheet]");
   if (b) { showSheet(complexOf(b.dataset.sheet)); }
 });
+
+/* ---------- plano interior de la estación ---------- */
+const patById = new Map(D.patterns.map((p) => [p.id, p]));
+function platformLabel(p) {
+  const ps = p.pats.map((id) => patById.get(id)).filter(Boolean);
+  if (!ps.length) return p.name || "Andén";
+  const refs = [...new Set(ps.map((x) => E.lines[x.line].ref))];
+  const tos = [...new Set(ps.map((x) => x.to))];
+  return (refs.length > 3 ? refs.slice(0, 3).join(", ") + "…" : refs.join(", ")) + " → " + (tos.length > 1 ? tos[0] + "…" : tos[0]);
+}
+function platformColor(p) {
+  const x = patById.get(p.pats[0]);
+  return x ? E.lines[x.line].color : tok("--muted");
+}
+// Para cada paso del trayecto, el camino por dentro de la estación (si hay plano).
+function indoorPaths(r) {
+  const out = [], opt = { accessible: state.accessible };
+  r.legs.forEach((L, k) => {
+    const prev = r.legs[k - 1], next = r.legs[k + 1];
+    let P = null, p = null, title = "";
+    if (L.type === "enter" && L.ent && next && next.type === "ride" && (P = I.planFor(L.station.id))) {
+      p = I.enterToPlatform(P, L.ent.id, next.p.id, opt);
+      title = `De la boca «${L.ent.name}» al andén ${next.line.ref} → ${next.p.to}`;
+    } else if (L.type === "exit" && L.ent && prev && prev.type === "ride" && (P = I.planFor(L.station.id))) {
+      p = I.platformToExit(P, prev.p.id, L.ent.id, opt);
+      title = `Del andén ${prev.line.ref} a la salida «${L.ent.name}»`;
+    } else if (L.type === "transfer" && !L.street && prev && next && prev.type === "ride" && next.type === "ride"
+      && (P = I.planFor(L.from.id)) && P.sids.includes(L.to.id)) {
+      p = I.platformToPlatform(P, prev.p.id, next.p.id, opt);
+      title = `Transbordo de ${prev.line.ref} a ${next.line.ref} → ${next.p.to}`;
+    }
+    out[k] = p ? Object.assign(p, { title }) : null;
+  });
+  return out;
+}
+
+let planMap = null;
+function openPlan(P, path, title) {
+  $("planTitle").textContent = title;
+  $("planSub").textContent = path ? (path.same ? I.describe(path) : `${fmtM(path.m)} · ${I.describe(path)}`) : "Pasillos, escaleras, ascensores, andenes y bocas";
+  $("planModal").hidden = false;
+  if (planMap) { planMap.remove(); planMap = null; }
+  planMap = L.map("planMap", { preferCanvas: true, maxZoom: 21, zoomSnap: 0.25, attributionControl: true });
+  planMap.attributionControl.setPrefix(false).addAttribution('© <a href="https://www.openstreetmap.org/copyright" target="_blank" rel="noopener">OpenStreetMap</a>');
+  const ll = (i) => [P.nodes[i][0], P.nodes[i][1]];
+  const ink = tok("--ink"), muted = tok("--muted"), acc = tok("--accent"), warn = tok("--warn"), surf = tok("--surface");
+  P.rooms.forEach((r) => L.polygon(r, { stroke: false, fillColor: tok("--rule"), fillOpacity: 0.6, interactive: false }).addTo(planMap));
+  P.platforms.forEach((p) => {
+    const hot = path && [path.start, path.end].some((x) => x.type === "platform" && x.platform === p);
+    const col = platformColor(p);
+    L.polygon(p.n.map(ll), { color: col, weight: hot ? 2.5 : 1, fillColor: col, fillOpacity: hot ? 0.6 : 0.3 })
+      .bindTooltip(esc(platformLabel(p)), { permanent: hot || !path, direction: "center", className: "platlbl" + (hot ? " hot" : "") })
+      .addTo(planMap);
+  });
+  P.draw.forEach((w) => {
+    const steps = w.k === "steps", lift = w.k === "elevator";
+    L.polyline(w.n.map(ll), { color: steps ? warn : lift ? tok("--me") : muted, weight: steps ? 4 : 3, opacity: 0.85, dashArray: steps ? "3 5" : null, lineCap: "round", interactive: false }).addTo(planMap);
+  });
+  P.ents.forEach((e) => {
+    const hot = path && [path.start, path.end].some((x) => x.type === "ent" && x.ent === e);
+    L.circleMarker(ll(e.i), { radius: hot ? 7 : 5, color: surf, weight: 2, fillColor: acc, fillOpacity: 1 })
+      .bindTooltip((hot ? (path.start.ent === e ? "Entra: " : "Sal: ") : "") + esc(e.name), { permanent: hot, direction: "top", offset: [0, -5], className: hot ? "ent" : "" })
+      .addTo(planMap);
+  });
+  let bounds = L.latLngBounds(P.nodes.map((n) => [n[0], n[1]]));
+  if (path && path.nodes.length > 1) {
+    const line = path.nodes.map(ll);
+    L.polyline(line, { color: surf, weight: 11, opacity: 0.95, lineCap: "round", lineJoin: "round", interactive: false }).addTo(planMap);
+    L.polyline(line, { color: acc, weight: 6, lineCap: "round", lineJoin: "round", interactive: false }).addTo(planMap);
+    L.circleMarker(line[0], { radius: 6, color: surf, weight: 2, fillColor: ink, fillOpacity: 1, interactive: false }).addTo(planMap);
+    bounds = L.latLngBounds(line);
+  }
+  setTimeout(() => { planMap.invalidateSize(); planMap.fitBounds(bounds, { padding: [40, 40], maxZoom: 20 }); }, 30);
+  $("planClose").focus();
+}
+function closePlan() {
+  $("planModal").hidden = true;
+  if (planMap) { planMap.remove(); planMap = null; }
+}
+$("planClose").addEventListener("click", closePlan);
+$("planModal").addEventListener("click", (e) => { if (e.target === $("planModal")) closePlan(); });
+document.addEventListener("keydown", (e) => { if (e.key === "Escape" && !$("planModal").hidden) closePlan(); });
 
 /* ---------- ficha de estación ---------- */
 function showSheet(c) {
@@ -624,7 +760,9 @@ function showSheet(c) {
     if (c.sids.includes(t.id) || xf.some((y) => y.t === t)) return;
     xf.push({ t, ...x });
   }));
-  let h = `<div class="sheet"><header><div><h2>${esc(c.name)}</h2><div style="margin-top:6px">${badges(c.lines)}</div></div><button type="button" class="iconbtn" id="closeSheet" title="Cerrar la ficha"><svg width="18" height="18" viewBox="0 0 24 24" aria-hidden="true"><path d="M6 6l12 12M18 6 6 18" stroke="currentColor" stroke-width="2" stroke-linecap="round"/></svg></button></header>`;
+  const plan = c.sids.map((id) => I.planFor(id)).find(Boolean);
+  const planBtn = plan ? `<button type="button" class="planbtn" id="sheetPlan" style="margin-top:10px">${IC.plan}Ver el plano interior</button>` : "";
+  let h = `<div class="sheet"><header><div><h2>${esc(c.name)}</h2><div style="margin-top:6px">${badges(c.lines)}</div>${planBtn}</div><button type="button" class="iconbtn" id="closeSheet" title="Cerrar la ficha"><svg width="18" height="18" viewBox="0 0 24 24" aria-hidden="true"><path d="M6 6l12 12M18 6 6 18" stroke="currentColor" stroke-width="2" stroke-linecap="round"/></svg></button></header>`;
   h += `<div><h4>Andenes</h4><ul>${dirs.map((d) => `<li><span>${badge(d.l)} dirección ${esc(d.to)}</span><span class="mini">cada ~${fmtMin(d.hw)} min</span></li>`).join("")}</ul></div>`;
   h += `<div><h4>Bocas de acceso (${ents.length})</h4>${ents.length ? `<ul>${ents.map((e) => `<li><button type="button" class="link" data-ent="${e.id}">${esc(e.name)}</button><span class="chips" style="display:flex;gap:4px">${entChips(e)}</span>${e.hours ? `<span class="h">Horario: ${esc(e.hours)}</span>` : ""}</li>`).join("")}</ul>` : '<p class="empty">OpenStreetMap no tiene bocas registradas para esta estación.</p>'}</div>`;
   if (xf.length) h += `<div><h4>Correspondencias cercanas</h4><ul>${xf.map((x) => `<li><span>${esc(x.t.name)} ${badges(x.t.lines)}</span><span class="mini ${x.same ? "ok" : ""}">${x.same ? "Pasillo" : "Por la calle"} · ${fmtM(x.m)}</span></li>`).join("")}</ul></div>`;
@@ -632,6 +770,7 @@ function showSheet(c) {
   const sh = $("sheet"); sh.innerHTML = h; sh.hidden = false;
   sh.scrollIntoView({ block: "nearest", behavior: "smooth" });
   $("closeSheet").onclick = () => { sh.hidden = true; };
+  if (plan) $("sheetPlan").onclick = () => openPlan(plan, null, "Plano de " + c.name);
   sh.querySelectorAll("[data-ent]").forEach((b) => b.addEventListener("click", () => {
     const e = D.entrances.find((x) => String(x.id) === b.dataset.ent);
     map.flyTo([e.lat, e.lon], 18);

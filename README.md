@@ -13,9 +13,11 @@ La app está en `docs/` y se publica con GitHub Pages. Se puede instalar en el m
 | `build_data.py` | Convierte las descargas en `data/network.json` |
 | `engine.js` | Motor de rutas (bocas, líneas, transbordos, posición en el tren) |
 | `app_template.html` | Interfaz, mapa y guía GPS |
+| `build_indoor.py` | Planos interiores: convierte pasillos, escaleras y andenes de OpenStreetMap en `data/indoor.json` (de momento, Passeig de Gràcia) |
+| `indoor.js` | Calcula el camino por dentro de la estación: boca → andén, andén → salida y transbordos |
 | `build_page.py` | Genera `docs/` (la app) y `metro-maps-bcn.html` (versión sin GPS) |
 | `make_icons.py` | Dibuja los iconos de la app |
-| `test_engine.js` | Trayectos de prueba: `node test_engine.js` |
+| `test_engine.js`, `test_indoor.js` | Pruebas: `node test_engine.js` y `node test_indoor.js` |
 
 ## Actualizar los datos
 
@@ -24,6 +26,7 @@ python tools_overpass.py data/q_full.txt data/osm_full.json
 python tools_overpass.py data/q_poi.txt data/osm_poi.json
 python tools_overpass.py data/q_bg.txt data/osm_bg.json
 python build_data.py
+python build_indoor.py
 python build_page.py
 ```
 

@@ -1,0 +1,13 @@
+[out:json][timeout:180];
+// Interior de estaciones: pasillos, escaleras, ascensores, andenes y bocas alrededor de un punto.
+// Uso: sustituir {{LAT}}, {{LON}} y {{R}} (metros).
+(
+ way["highway"~"^(footway|corridor|steps|elevator|path|pedestrian)$"](around:{{R}},{{LAT}},{{LON}});
+ way["indoor"](around:{{R}},{{LAT}},{{LON}});
+ way["railway"="platform"](around:{{R}},{{LAT}},{{LON}});
+ way["public_transport"="platform"](around:{{R}},{{LAT}},{{LON}});
+ node["railway"~"^(subway_entrance|train_station_entrance)$"](around:{{R}},{{LAT}},{{LON}});
+ node["highway"="elevator"](around:{{R}},{{LAT}},{{LON}});
+ node["barrier"~"turnstile"](around:{{R}},{{LAT}},{{LON}});
+);
+out body geom;
